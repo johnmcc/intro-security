@@ -38,7 +38,7 @@ psql -d injection_users -f ./db/seed.sql
 ruby app.rb
 ```
 
-[i] Take a look in psql and demonstrate that there is one user present - admin / password
+[i] Take a look in psql and demonstrate that there is one user present - admin / password. (Emphasise that this is a contrived example - this isn't how you should handle user authentication!)
 
 [i] Then, go to [http://localhost:4567/authenticate/admin/password](http://localhost:4567/authenticate/admin/password) and demonstrate that the page is running some SQL (./models/user.rb) to check the user's credentials
 
