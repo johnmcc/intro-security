@@ -38,14 +38,44 @@ psql -d injection_users -f ./db/seed.sql
 ruby app.rb
 ```
 
-[i] Take a look in psql and demonstrate that there is one user present - admin / password. (Emphasise that this is a contrived example - this isn't how you should handle user authentication!)
+Take a look in psql and confirm there is one username / password in there. (This isn't how you would usually store user information - this is a slightly contrived example.)
 
-[i] Then, go to [http://localhost:4567/authenticate/admin/password](http://localhost:4567/authenticate/admin/password) and demonstrate that the page is running some SQL (./models/user.rb) to check the user's credentials
+Go to [http://localhost:4567/authenticate/admin/password](http://localhost:4567/authenticate/admin/password). Notice that the page is running and demonstrate that the page is running some SQL (./models/user.rb) to check the user's credentials.
 
-[i] Finally, show the students the following specially crafted URL:
+Enter the following malicious URL in the URL bar of your browser:
 http://localhost:4567/authenticate/admin/password'; INSERT INTO injection_users (username, password) VALUES ('evil_hacker','password');--
 
-[i] Talk them through what's happening here, open the URL in your browser, then confirm in PSQL that the hacker has added their details to the database. (Make sure you copy / paste the full URL!)
+(Make sure you copy it all.)
+
+Check the users table in psql again - notice that there's another user in the table!
+
+Copy and paste the second query parameter into the model's code to understand what's going on - the query is being modified to insert a second user.
+
+How can we get around this? There are at least two strategies.
+
+### Escape the strings that are being passed to the database.
+
+We can call a method on the `db` object to clean the username and password before it gets to the database:
+
+```
+sql = "SELECT * FROM injection_users WHERE username='#{db.escape_string(username)}' AND password='#{db.escape_string(password)}';"
+```
+
+However, this isn't the best solution. We'd have to do this every time we pass a value to the database.
+
+### Prepared Statements
+
+A better solution is to use prepared statements, which automatically clean the parameters coming in:
+
+```
+def self.authenticate(username, password)
+  db = PG.connect({ host: 'localhost', dbname: 'injection_users' })
+  db.prepare("check", "SELECT * FROM injection_users WHERE username=$1 AND password=$2;")
+  result = db.exec_prepared("check", [username, password])
+  db.close
+  return result.count > 0 ? true:false
+end
+```
 
 ## Escaping HTML
 
@@ -59,15 +89,37 @@ psql -d escape_html -f ./db/seed.sql
 ruby app.rb
 ```
 
-[i] Take a look at http://localhost:4567/users/1 to see what the page should look like. 
+Take a look at http://localhost:4567/users/1 to see what the page should look like. 
 
-[i] Next, load up http://localhost:4567/users/2 and notice that a malicious message has popped up. Explain that although the script is relatively harmless in this case, a malicious script could pass on visitors' credentials to a third party (for example.)
+Next, load up http://localhost:4567/users/2 and notice that a malicious message has popped up. Although the script is relatively harmless in this case, a malicious script could pass on visitors' credentials to a third party (for example.)
+
+Ideally, you would sanitize the user's input when it was entered, with some form validation. In this case, we're going to look at another strategy - sanitizing using Ruby's Sanitize gem.
+
+```
+# Terminal
+gem install Sanitize
+```
+
+Within our controller, let's require the gem we've just installed:
+```
+require './models/user'
+
+# added!
+require 'sanitize' 
+
+require 'sinatra'
+require 'sinatra/contrib/all'
+```
+
+And finally, using the sanitize gem in the layout:
+
+```
+<%= Sanitize.clean(@user.bio) %>
+```
 
 ## General strategies
 
 Let's think about the two types of attack we've seen today. What do they have in common?
-
-[i] Let the students bounce some ideas around. Hopefully, they'll head towards...
 
 Both of these attacks assume that the data the user inputted was trustworthy. This is one of the most important takeaway points of today's session: *never trust data that comes directly from the user*. What does this mean in practice?
 
@@ -76,10 +128,8 @@ Both of these attacks assume that the data the user inputted was trustworthy. Th
 
 Be aware that the most vulnerable parts of your app are the parts where users interact with it! Let's have a think about some of the different ways they might be able to do this.
 
-[i] Again, let the students discuss the various means of interacting with, say, a web app. Write them on the board as they come up. Here are some potential answers:
-
 - The URL that the user enters / clicks on
-- Forms submitted by the user
+- Forms submitted by the user (File upload fields can be particularly vulnerable)
 - Values stored locally on users' devices - for example cookies, localstorage etc.
 
 The most vulnerable parts of your app are the parts where users interact with it. So, start with these areas of your app. Put yourself in an attackers shoes. Think - if you were an attacker, would you be able to compromise this part of the app somehow?
@@ -107,10 +157,3 @@ The only exception to this is where companies explicitly encourage you to find a
 - [Facebook](https://www.facebook.com/whitehat)
 - [Snapchat](https://hackerone.com/snapchat)
 - [A big list of bug bounties](https://bugcrowd.com/list-of-bug-bounty-programs)
-
-## Homework
-
-Investigate specific solutions to the insecurities above.
-
-- For SQL injection attacks, read into "prepared statements"
-- For cleaning up user submitted HTML, look into the "sanitize" gem.
